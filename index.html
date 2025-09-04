@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Darwin Community Helper</title>
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Google Fonts - Inter for legible font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <style>
+        /* Custom styles for the app */
+        body {
+            font-family: 'Inter', sans-serif; /* A legible modern font */
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .task-card, .form-field, .btn, .modal-content, .category-icon {
+            border-radius: 0.75rem; /* Rounded corners */
+        }
+        /* NT Inspired Color Palette */
+        .bg-nt-red-ochre { background-color: #A3432B; } /* Deep earthy red */
+        .text-nt-red-ochre { color: #A3432B; }
+        .border-nt-red-ochre { border-color: #A3432B; }
+
+        .bg-nt-sand { background-color: #F8E8D5; } /* Light sand/tan */
+        .text-nt-sand { color: #F8E8D5; }
+        .border-nt-sand { border-color: #F8E8D5; }
+
+        .bg-nt-eucalypt { background-color: #6B8E23; } /* Muted green */
+        .text-nt-eucalypt { color: #6B8E23; }
+        .border-nt-eucalypt { border-color: #6B8E23; }
+
+        .bg-nt-sky { background-color: #87CEEB; } /* Soft sky blue, for contrast */
+        .text-nt-sky { color: #87CEEB; }
+        .border-nt-sky { border-color: #87CEEB; }
+
+        .focus-ring-nt:focus { outline: 2px solid #A3432B; outline-offset: 2px; }
+
+        .hero-background {
+            background-image: url('https://source.unsplash.com/random/1600x900/?northern-territory-landscape,australia'); /* High-quality random NT landscape */
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+        .hero-overlay {
+            background-color: rgba(0, 0, 0, 0.4); /* Dark overlay for text readability */
+        }
+
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: auto;
+            padding: 2.5rem;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: #333;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .active-filter {
+            @apply bg-nt-red-ochre text-white; /* Tailwind's @apply for custom active state */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800">
+    <!-- Header - Fixed top for navigation -->
+    <header class="fixed top-0 left-0 w-full z-50 bg-white shadow-lg p-4 flex justify-between items-center">
+        <h1 class="text-2xl font-bold text-nt-red-ochre">Darwin Community Helper</h1>
+        <nav class="flex space-x-4">
+            <button id="showPostTask" class="btn bg-nt-eucalypt hover:bg-green-700 text-white font-semibold py-2 px-4 focus-ring-nt transition duration-300">Post a Task</button>
+            <button id="showBrowseTasks" class="btn bg-nt-sky hover:bg-blue-600 text-white font-semibold py-2 px-4 focus-ring-nt transition duration-300">Browse Tasks</button>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="heroSection" class="hero-background relative h-screen flex flex-col justify-center items-center text-white px-4 pt-16 md:pt-0">
+        <div class="hero-overlay absolute inset-0"></div>
+        <div class="relative z-10 text-center max-w-4xl mx-auto">
+            <h2 class="text-4xl md:text-6xl font-extrabold leading-tight mb-4 drop-shadow-lg">Get It Done In Darwin</h2>
+            <p class="text-lg md:text-xl mb-8 drop-shadow-md">Connect with trusted locals for any task – big or small, within our vibrant community.</p>
+
+            <!-- Search Bar & Call to Action -->
+            <div class="flex flex-col md:flex-row items-center justify-center w-full max-w-2xl mx-auto space-y-4 md:space-y-0 md:space-x-4">
+                <input type="text" id="heroSearchInput" placeholder="I need help with..."
+                       class="form-field w-full md:w-3/4 p-4 text-gray-800 rounded-lg shadow-md focus:border-nt-red-ochre focus:ring-nt-red-ochre focus:ring-opacity-50 transition duration-300">
+                <button id="heroSearchBtn" class="btn bg-nt-red-ochre hover:bg-red-700 text-white font-bold py-4 px-8 w-full md:w-auto rounded-lg shadow-md focus-ring-nt transition duration-300">Find Helpers</button>
+            </div>
+
+            <!-- Popular Categories -->
+            <div class="mt-12 flex flex-wrap justify-center gap-4">
+                <button class="category-icon bg-white text-nt-red-ochre hover:bg-nt-sand py-3 px-6 text-base font-semibold shadow-md transition duration-300" data-category="Gardening">Gardening</button>
+                <button class="category-icon bg-white text-nt-red-ochre hover:bg-nt-sand py-3 px-6 text-base font-semibold shadow-md transition duration-300" data-category="Cleaning">Cleaning</button>
+                <button class="category-icon bg-white text-nt-red-ochre hover:bg-nt-sand py-3 px-6 text-base font-semibold shadow-md transition duration-300" data-category="Deliveries">Deliveries</button>
+                <button class="category-icon bg-white text-nt-red-ochre hover:bg-nt-sand py-3 px-6 text-base font-semibold shadow-md transition duration-300" data-category="Cultural Support">Cultural Support</button>
+            </div>
+        </div>
+    </section>
+
+    <div class="container mx-auto p-4 md:p-8 pt-24 md:pt-16">
+        <!-- User Info Display -->
+        <div class="bg-white p-3 rounded-lg shadow-sm mb-6 text-sm text-center md:text-left">
+            Current User ID: <span id="userIdDisplay" class="font-mono text-gray-600">Loading...</span>
+        </div>
+
+        <!-- Poster View: Post New Task Form -->
+        <section id="postTaskView" class="bg-white p-6 md:p-8 shadow-lg rounded-lg mb-8" style="display: none;">
+            <h2 class="text-3xl font-semibold mb-6 text-nt-red-ochre">Post a New Task</h2>
+            <form id="postTaskForm" class="space-y-4">
+                <div>
+                    <label for="taskTitle" class="block text-sm font-medium text-gray-700">Task Title</label>
+                    <input type="text" id="taskTitle" name="taskTitle" placeholder="e.g., Help with gardening, Cultural Exchange event setup"
+                           class="form-field mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus-ring-nt">
+                </div>
+                <div>
+                    <label for="taskDescription" class="block text-sm font-medium text-gray-700">Description</label>
+                    <textarea id="taskDescription" name="taskDescription" rows="4" placeholder="Detailed description of the task, what is needed, and any specific requirements..."
+                              class="form-field mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus-ring-nt"></textarea>
+                </div>
+                <div>
+                    <label for="taskLocation" class="block text-sm font-medium text-gray-700">Location (Darwin Suburb)</label>
+                    <select id="taskLocation" name="taskLocation"
+                            class="form-field mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 bg-white focus-ring-nt">
+                        <option value="">Select a suburb</option>
+                        <option value="Darwin City">Darwin City</option>
+                        <option value="Palmerston">Palmerston</option>
+                        <option value="Casuarina">Casuarina</option>
+                        <option value="Fannie Bay">Fannie Bay</option>
+                        <option value="Nightcliff">Nightcliff</option>
+                        <option value="Rapid Creek">Rapid Creek</option>
+                        <option value="Parap">Parap</option>
+                        <option value="Stuart Park">Stuart Park</option>
+                        <option value="Larrakeyah">Larrakeyah</option>
+                        <option value="Wulagi">Wulagi</option>
+                        <option value="Karama">Karama</option>
+                        <option value="Marrara">Marrara</option>
+                        <option value="Berrimah">Berrimah</option>
+                        <option value="East Arm">East Arm</option>
+                        <option value="Howard Springs">Howard Springs</option>
+                        <option value="Humpty Doo">Humpty Doo</option>
+                        <option value="Wagaman">Wagaman</option>
+                        <!-- Add more Darwin suburbs as needed -->
+                    </select>
+                </div>
+                <div>
+                    <label for="taskBudget" class="block text-sm font-medium text-gray-700">Budget ($)</label>
+                    <input type="number" id="taskBudget" name="taskBudget" placeholder="e.g., 50" min="0"
+                           class="form-field mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus-ring-nt">
+                </div>
+                <div>
+                    <label for="taskTags" class="block text-sm font-medium text-gray-700">Tags (comma-separated)</label>
+                    <input type="text" id="taskTags" name="taskTags" placeholder="e.g., Gardening, Cleaning, Deliveries, Cultural Support, Tech Help"
+                           class="form-field mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus-ring-nt">
+                </div>
+                <button type="submit" class="btn bg-nt-red-ochre hover:bg-red-700 text-white font-semibold py-3 px-6 w-full focus-ring-nt transition duration-300">Post Task</button>
+            </form>
+        </section>
+
+        <!-- Helper View: Browse Tasks -->
+        <section id="browseTasksView" class="bg-white p-6 md:p-8 shadow-lg rounded-lg">
+            <h2 class="text-3xl font-semibold mb-6 text-nt-red-ochre">Available Tasks for Helpers</h2>
+
+            <!-- Tag Filters -->
+            <div class="mb-6 flex flex-wrap gap-2 justify-center">
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200 active-filter" data-tag="All">All</button>
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200" data-tag="Gardening">Gardening</button>
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200" data-tag="Cleaning">Cleaning</button>
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200" data-tag="Deliveries">Deliveries</button>
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200" data-tag="Cultural Support">Cultural Support</button>
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200" data-tag="Tech Help">Tech Help</button>
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200" data-tag="Shopping">Shopping</button>
+                <button class="filter-tag-btn bg-gray-200 text-gray-700 text-sm py-1 px-3 rounded-full transition duration-200" data-tag="Art">Art</button>
+                <!-- More tags can be added here -->
+            </div>
+
+            <div id="taskList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Task cards will be loaded here by JavaScript -->
+                <p id="noTasksMessage" class="col-span-full text-center text-gray-500 hidden">No tasks found. Be the first to post one!</p>
+            </div>
+        </section>
+
+        <!-- Task Detail Modal -->
+        <div id="taskDetailModal" class="modal">
+            <div class="modal-content bg-white p-8 rounded-lg shadow-xl relative">
+                <span class="close-button absolute top-4 right-6">&times;</span>
+                <h3 id="modalTaskTitle" class="text-2xl font-bold mb-4 text-nt-red-ochre"></h3>
+                <p class="text-gray-700 mb-4"><strong class="text-nt-eucalypt">Description:</strong> <span id="modalTaskDescription"></span></p>
+                <p class="text-gray-700 mb-2"><strong class="text-nt-eucalypt">Location:</strong> <span id="modalTaskLocation"></span></p>
+                <p class="text-gray-700 mb-2"><strong class="text-nt-eucalypt">Budget:</strong> $<span id="modalTaskBudget"></span></p>
+                <p class="text-gray-700 mb-2"><strong class="text-nt-eucalypt">Tags:</strong> <span id="modalTaskTags" class="italic text-sm"></span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "{{FIREBASE_API_KEY}}", // Replace with your Firebase API Key
+            authDomain: "{{YOUR_PROJECT_ID}}.firebaseapp.com", // Replace with your Project ID
+            projectId: "{{YOUR_PROJECT_ID}}", // Replace with your Project ID
+            storageBucket: "{{YOUR_PROJECT_ID}}.appspot.com", // Replace with your Project ID
+            messagingSenderId: "{{YOUR_MESSAGING_SENDER_ID}}", // Replace with your Messaging Sender ID
+            appId: "{{YOUR_APP_ID}}" // Replace with your App ID
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // DOM Elements
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const heroSection = document.getElementById('heroSection');
+        const postTaskView = document.getElementById('postTaskView');
+        const browseTasksView = document.getElementById('browseTasksView');
+        const showPostTaskBtn = document.getElementById('showPostTask');
+        const showBrowseTasksBtn = document.getElementById('showBrowseTasks');
+        const postTaskForm = document.getElementById('postTaskForm');
+        const taskList = document.getElementById('taskList');
+        const noTasksMessage = document.getElementById('noTasksMessage');
+        const filterTagButtons = document.querySelectorAll('.filter-tag-btn');
+        const taskDetailModal = document.getElementById('taskDetailModal');
+        const closeModalBtn = taskDetailModal.querySelector('.close-button');
+        const heroSearchInput = document.getElementById('heroSearchInput');
+        const heroSearchBtn = document.getElementById('heroSearchBtn');
+        const categoryIcons = document.querySelectorAll('.category-icon');
+
+        let currentActiveFilter = 'All'; // Track the currently active filter tag
+
+        // --- Firebase Authentication ---
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                userIdDisplay.textContent = user.uid;
+                console.log("Logged in as:", user.uid);
+            } else {
+                // Sign in anonymously if no user is found
+                auth.signInAnonymously().catch(error => {
+                    console.error("Error signing in anonymously:", error);
+                    userIdDisplay.textContent = "Error logging in.";
+                });
+            }
+        });
+
+        // --- View Switching ---
+        function showView(viewId) {
+            heroSection.style.display = 'none';
+            postTaskView.style.display = 'none';
+            browseTasksView.style.display = 'none';
+            userIdDisplay.parentElement.style.display = 'none'; // Hide user ID on hero page
+
+            if (viewId === 'heroSection') {
+                heroSection.style.display = 'flex'; // Hero section is a flex container
+                userIdDisplay.parentElement.style.display = 'block'; // Show user ID in header
+            } else {
+                document.getElementById(viewId).style.display = 'block';
+                userIdDisplay.parentElement.style.display = 'block'; // Show user ID on other pages
+            }
+        }
+
+        // Event listeners for header navigation
+        showPostTaskBtn.addEventListener('click', () => showView('postTaskView'));
+        showBrowseTasksBtn.addEventListener('click', () => showView('browseTasksView'));
+
+        // Default to hero section on load
+        showView('heroSection');
+
+        // --- Hero Section Interactions ---
+        heroSearchBtn.addEventListener('click', () => {
+            const searchTerm = heroSearchInput.value.trim();
+            if (searchTerm) {
+                // Here you would implement actual search logic.
+                // For this example, we'll just switch to browse tasks and log the search term.
+                console.log("Searching for:", searchTerm);
+                alert(`Searching for tasks related to: "${searchTerm}"`);
+                // Potentially set a filter based on the search term and then show browseTasksView
+                showView('browseTasksView');
+            } else {
+                showView('browseTasksView'); // If search bar is empty, just go to browse view
+            }
+        });
+
+        categoryIcons.forEach(icon => {
+            icon.addEventListener('click', (e) => {
+                const category = e.target.dataset.category;
+                console.log("Category selected:", category);
+                // Set the active filter to the selected category and then navigate to browse tasks
+                currentActiveFilter = category;
+                // Update the visual state of filter buttons when navigating from hero
+                filterTagButtons.forEach(btn => {
+                    btn.classList.remove('active-filter', 'bg-nt-red-ochre', 'text-white');
+                    btn.classList.add('bg-gray-200', 'text-gray-700');
+                    if (btn.dataset.tag === category) {
+                        btn.classList.add('active-filter', 'bg-nt-red-ochre', 'text-white');
+                        btn.classList.remove('bg-gray-200', 'text-gray-700');
+                    }
+                });
+                showView('browseTasksView');
+            });
+        });
+
+
+        // --- Post New Task ---
+        postTaskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const taskTitle = document.getElementById('taskTitle').value;
+            const taskDescription = document.getElementById('taskDescription').value;
+            const taskLocation = document.getElementById('taskLocation').value;
+            const taskBudget = parseFloat(document.getElementById('taskBudget').value);
+            const taskTags = document.getElementById('taskTags').value.split(',').map(tag => tag.trim()).filter(tag => tag !== '');
+
+            if (!taskTitle || !taskDescription || !taskLocation || isNaN(taskBudget) || taskBudget <= 0) {
+                alert('Please fill in all required fields and ensure the budget is a positive number.');
+                return;
+            }
+
+            try {
+                await db.collection('artifacts').doc(firebaseConfig.appId).collection('public').doc('data').collection('tasks').add({
+                    title: taskTitle,
+                    description: taskDescription,
+                    location: taskLocation,
+                    budget: taskBudget,
+                    tags: taskTags,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    postedBy: auth.currentUser.uid
+                });
+
+                alert('Task posted successfully!');
+                postTaskForm.reset(); // Clear the form
+                showView('browseTasksView'); // Switch to browse tasks view
+            } catch (error) {
+                console.error('Error adding document: ', error);
+                alert('Failed to post task. Please try again.');
+            }
+        });
+
+        // --- Display Tasks (Real-time updates) ---
+        let allTasksCache = []; // Cache all tasks for efficient filtering
+
+        function renderTasks(tasks) {
+            taskList.innerHTML = ''; // Clear existing tasks
+            const filteredTasks = filterTasks(tasks, currentActiveFilter);
+
+            if (filteredTasks.length === 0) {
+                noTasksMessage.classList.remove('hidden');
+            } else {
+                noTasksMessage.classList.add('hidden');
+                filteredTasks.forEach(task => {
+                    const taskCard = `
+                        <div class="task-card bg-nt-sand p-6 shadow-md rounded-lg transform hover:scale-105 transition duration-300 cursor-pointer border border-nt-red-ochre"
+                             data-task-id="${task.id}" data-tags="${task.tags.join(',')}"
+                             data-title="${task.title}" data-description="${task.description}" data-location="${task.location}" data-budget="${task.budget}"
+                        >
+                            <h3 class="text-xl font-semibold text-nt-red-ochre mb-2">${task.title}</h3>
+                            <p class="text-gray-700 mb-3 line-clamp-2">${task.description}</p>
+                            <div class="flex justify-between items-center text-sm text-gray-600">
+                                <span class="flex items-center"><svg class="w-4 h-4 mr-1 text-nt-eucalypt" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6c0 1.25.4 2.41 1.09 3.32L10 18.59l4.91-7.27A6 6 0 0010 2zm0 8a2 2 0 100-4 2 2 0 000 4z"></path></svg>${task.location}</span>
+                                <span class="font-bold text-nt-red-ochre">$${task.budget}</span>
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                ${task.tags.map(tag => `<span class="bg-nt-eucalypt text-white text-xs px-2 py-1 rounded-full">${tag}</span>`).join('')}
+                            </div>
+                        </div>
+                    `;
+                    taskList.innerHTML += taskCard;
+                });
+
+                // Add event listeners to newly rendered task cards
+                document.querySelectorAll('.task-card').forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        // Prevent click from bubbling up if target is a tag span
+                        if (e.target.tagName === 'SPAN' && e.target.classList.contains('bg-nt-eucalypt')) {
+                            return;
+                        }
+                        displayTaskModal(card);
+                    });
+                });
+            }
+        }
+
+        // Filter tasks based on the active tag
+        function filterTasks(tasks, tag) {
+            if (tag === 'All') {
+                return tasks;
+            }
+            return tasks.filter(task => task.tags && task.tags.includes(tag));
+        }
+
+        // Listen for real-time updates from Firestore
+        db.collection('artifacts').doc(firebaseConfig.appId).collection('public').doc('data').collection('tasks')
+            .orderBy('createdAt', 'desc') // Order by creation time
+            .onSnapshot(snapshot => {
+                allTasksCache = []; // Clear cache
+                snapshot.forEach(doc => {
+                    allTasksCache.push({ id: doc.id, ...doc.data() });
+                });
+                renderTasks(allTasksCache); // Render with the current filter applied to the fresh data
+            }, error => {
+                console.error("Error fetching tasks:", error);
+                noTasksMessage.textContent = "Error loading tasks.";
+                noTasksMessage.classList.remove('hidden');
+            });
+
+        // --- Tag Filtering ---
+        filterTagButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const tag = e.target.dataset.tag;
+                currentActiveFilter = tag; // Update the active filter
+
+                // Update active button styling
+                filterTagButtons.forEach(btn => btn.classList.remove('active-filter', 'bg-nt-red-ochre', 'text-white'));
+                filterTagButtons.forEach(btn => btn.classList.add('bg-gray-200', 'text-gray-700'));
+                e.target.classList.add('active-filter', 'bg-nt-red-ochre', 'text-white');
+                e.target.classList.remove('bg-gray-200', 'text-gray-700');
+
+                renderTasks(allTasksCache); // Re-render from the cached data with the new filter
+            });
+        });
+
+        // --- Task Detail Modal ---
+        function displayTaskModal(cardElement) {
+            document.getElementById('modalTaskTitle').textContent = cardElement.dataset.title;
+            document.getElementById('modalTaskDescription').textContent = cardElement.dataset.description;
+            document.getElementById('modalTaskLocation').textContent = cardElement.dataset.location;
+            document.getElementById('modalTaskBudget').textContent = cardElement.dataset.budget;
+            document.getElementById('modalTaskTags').textContent = cardElement.dataset.tags.split(',').filter(tag => tag !== '').map(tag => `#${tag}`).join(' ');
+            taskDetailModal.style.display = 'flex'; // Show modal
+        }
+
+        closeModalBtn.addEventListener('click', () => {
+            taskDetailModal.style.display = 'none'; // Hide modal
+        });
+
+        // Close modal if user clicks outside of it
+        window.addEventListener('click', (event) => {
+            if (event.target === taskDetailModal) {
+                taskDetailModal.style.display = 'none';
+            }
+        });
+
+        // Placeholder for initial auth token if available (for testing environments)
+        // In a real scenario, this might come from a server-side rendered page or a secure cookie.
+        if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+            auth.signInWithCustomToken(window.__initial_auth_token).catch(error => {
+                console.error("Error signing in with custom token:", error);
+            });
+        }
+    </script>
+</body>
+</html>
